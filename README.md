@@ -13,28 +13,26 @@ Workspace này chỉ chứa **docs, convention và scripts**. Hai repo code nằ
 
 ## Bắt đầu
 
+Workspace này **không có code, không có `.env`, không có script** — chỉ tài liệu và quy ước. Mỗi repo tự chạy được:
+
 ```bash
-cp .env.example .env         # kiểm tra port và bộ DB_*
-./scripts/db-setup.sh        # bật Postgres local, tạo role + database
-./scripts/install-all.sh     # npm install cho từng repo
-./scripts/db-migrate.sh      # chạy migration
-./scripts/start-all.sh       # chạy service + web
+# Backend
+cd ../qltb-service
+cp .env.example .env      # Postgres local: host/port/user/pass/db
+npm install
+npm run db:setup          # bật postgresql, tạo role + database (cần sudo)
+npm run db:migrate
+npm run db:seed           # loại thiết bị mẫu
+npm run start:dev         # http://localhost:3400 — swagger /docs
+
+# Frontend
+cd ../qltb-web
+cp .env.example .env.local
+npm install
+npm run dev               # http://localhost:3401
 ```
 
-Cần Node 22 (`.nvmrc` ở mỗi repo) và PostgreSQL 16 chạy local.
-
-`.env` ở workspace và `.env` ở từng repo **không commit**. Bộ giá trị dev mặc định trong `.env.example` chỉ dùng cho máy local.
-
-## Scripts
-
-| Lệnh | Việc |
-|---|---|
-| `./scripts/db-setup.sh` | Bật `postgresql`, tạo role `DB_USER` và database `DB_NAME` nếu chưa có |
-| `./scripts/db-migrate.sh` | `npm run db:migrate` trong service |
-| `./scripts/install-all.sh` | `npm install` / `npm ci` cho từng repo |
-| `./scripts/start-all.sh` | Chạy service + web, log vào `scripts/logs/` |
-| `./scripts/start-service.sh` · `start-web.sh` | Chạy riêng từng cái |
-| `./scripts/stop-all.sh` | Dừng theo PID đã ghi |
+Cần Node 22 (`.nvmrc` ở mỗi repo) và PostgreSQL 16 chạy local. `.env` / `.env.local` **không commit**.
 
 ## Tài liệu
 

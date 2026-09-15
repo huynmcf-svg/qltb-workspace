@@ -8,16 +8,15 @@ Entry point cho LLM agent làm việc trên dự án QLTB — hệ thống quả
 
 ```
 quan-ly-thiet-bi/
-├── qltb-workspace/        ← bạn đang ở đây: docs, scripts, convention
+├── qltb-workspace/        ← bạn đang ở đây: CHỈ docs và convention, không có code
 │   ├── docs/
 │   │   └── rules/         ← cấu trúc bắt buộc cho backend / frontend
-│   ├── plans/
-│   └── scripts/
-├── qltb-service/          ← repo riêng, NestJS 11 + Drizzle
+│   └── plans/
+├── qltb-service/          ← repo riêng, NestJS 11 + Drizzle. Script DB, .env ở đây
 └── qltb-web/              ← repo riêng, Next.js 16 + shadcn
 ```
 
-Ba thư mục nằm **cạnh nhau**, mỗi cái một git riêng. Scripts trong workspace trỏ sang `../qltb-service` và `../qltb-web`. Commit trong sub-repo là commit của repo đó.
+Ba thư mục nằm **cạnh nhau**, mỗi cái một git riêng. Code, script, `.env` chỉ nằm trong `qltb-service/` và `qltb-web/` — **không đưa vào workspace**. Commit trong sub-repo là commit của repo đó.
 
 ## Đọc gì trước khi làm
 
@@ -44,7 +43,7 @@ Ba thư mục nằm **cạnh nhau**, mỗi cái một git riêng. Scripts trong 
 
 **Idempotency cho POST có side effect** — chưa có ở khung này, nhưng đừng viết endpoint theo cách sau này không gắn `Idempotency-Key` được (ví dụ dựa vào `SELECT` rồi `INSERT` thay vì unique constraint).
 
-**Secret chỉ ở `.env`.** `.env.example` chỉ có placeholder / giá trị dev local.
+**Secret chỉ ở `.env` của từng repo.** `.env.example` chỉ có placeholder / giá trị dev local. Workspace không có `.env`.
 
 ## Quy ước
 

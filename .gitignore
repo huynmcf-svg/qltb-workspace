@@ -1,28 +1,4 @@
-# ── Secrets — KHÔNG BAO GIỜ commit ─────────────────────────────
-.env
-.env.*
-!.env.example
-
-*.pem
-*.key
-*.crt
-*.p12
-*.kubeconfig
-certs/
-
-# ── Dependency & build ─────────────────────────────────────────
-node_modules/
-dist/
-build/
-out/
-coverage/
-
-# ── Runtime ────────────────────────────────────────────────────
-scripts/logs/
-!scripts/logs/.gitkeep
-*.pid
-
-# ── Tài liệu cứng ──────────────────────────────────────────────
+# ── Tài liệu cứng — không commit file văn phòng ─────────────────
 *.docx
 *.xlsx
 *.pptx
