@@ -38,6 +38,7 @@ Cần Node 22 (`.nvmrc` ở mỗi repo) và PostgreSQL 16 chạy local. `.env` /
 
 | Tài liệu | Ở đâu |
 |---|---|
+| **Đặc tả gốc**: quan hệ dữ liệu + danh sách API (từ `qltb.docx`) | [`docs/spec/qltb-spec.md`](docs/spec/qltb-spec.md) |
 | Tổng quan dự án, nghiệp vụ | [`docs/project-overview.md`](docs/project-overview.md) |
 | Quy ước branch, commit, đặt tên, Swagger | [`docs/conventions.md`](docs/conventions.md) |
 | Contract REST giữa service và web | [`docs/api-contracts.md`](docs/api-contracts.md) |
@@ -47,11 +48,11 @@ Cần Node 22 (`.nvmrc` ở mỗi repo) và PostgreSQL 16 chạy local. `.env` /
 
 ## Trạng thái
 
-**Khung dự án: đã dựng.**
+**Đủ chức năng theo đặc tả** (86 endpoint, 18 màn web). Cột ✅ trong [`docs/api-contracts.md`](docs/api-contracts.md); các điểm đặc tả chưa nói được chốt ở mục "Đã chốt" cuối file đó.
 
 | | Có gì |
 |---|---|
-| `qltb-service` | Pipeline REST (envelope `{ request_id, data, error }`, ValidationPipe, exception filter, Swagger `/docs` có test ép mô tả tiếng Việt), Drizzle + migration, `/health`, module `device` mẫu (list / get / create) |
-| `qltb-web` | Next.js App Router + shadcn/ui + Tailwind v4, lớp gọi API duy nhất `lib/api/client.ts`, TanStack Query, màn danh sách thiết bị mẫu |
+| `qltb-service` | Auth (JWT + refresh cookie xoay, quên/đặt lại mật khẩu), phân quyền theo ma trận trong DB, phạm vi doanh nghiệp + chi nhánh, idempotency, audit append-only; users / roles / enterprises / devices (gán, thu hồi, khoá, API key) / warranties / quota (cấp, phân bổ, lượt dùng từ thiết bị) / alerts + notifications (job cron) / exchanges / dashboard / reports xlsx / audit-logs. 34 test |
+| `qltb-web` | Đăng nhập, tổng quan có biểu đồ, và màn cho từng nhóm: thiết bị (chi tiết + tab), doanh nghiệp (chi tiết + tab), người dùng, vai trò (ma trận quyền), sản lượng, bảo hành, đổi trả, cảnh báo, thông báo, nhật ký, báo cáo, tài khoản |
 
-Chưa có: xác thực & phân quyền, idempotency, audit log, CI/CD. Xem [`plans/`](plans/).
+Chưa có: kênh gửi email/SMS, báo cáo PDF, CI/CD, rate-limit.

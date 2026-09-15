@@ -1,54 +1,72 @@
 # Tổng quan dự án QLTB
 
+Nguồn: [`spec/qltb-spec.md`](spec/qltb-spec.md) (đặc tả gốc). File này diễn giải đặc tả thành mô hình để đọc code — đặc tả nói gì thì đặc tả thắng.
+
 ## Dự án này là gì
 
-QLTB là hệ thống quản lý thiết bị nội bộ: theo dõi **thiết bị nào đang ở đâu, do ai giữ, tình trạng ra sao, và đã qua những gì**.
+QLTB quản lý **thiết bị được bán / cấp cho doanh nghiệp** (ví dụ văn phòng công chứng và các chi nhánh) và theo dõi **sản lượng sử dụng** của từng máy. Nhà cung cấp (quản trị viên hệ thống) nhập máy vào kho, gán cho doanh nghiệp, cấp sản lượng theo gói; thiết bị ngoài hiện trường báo lượt sử dụng về, sản lượng trừ dần; hết sản lượng hoặc hết thời gian gói thì máy bị khoá. Kèm theo là bảo hành, đổi trả máy, cảnh báo, thông báo, dashboard, báo cáo và nhật ký kiểm toán.
 
 Bốn nhóm nghiệp vụ chính:
 
 | Nhóm | Việc |
 |---|---|
-| **Hồ sơ thiết bị** | Đăng ký thiết bị mới (mã, tên, loại, hãng, model, serial, ngày mua, giá, bảo hành), sửa thông tin, thanh lý |
-| **Phân bổ** | Cấp thiết bị cho đơn vị / phòng ban / cá nhân, thu hồi, luân chuyển giữa các bên |
-| **Bảo trì** | Ghi nhận sự cố, lập phiếu bảo trì / sửa chữa, theo dõi tiến độ, chi phí |
-| **Báo cáo** | Kiểm kê, thống kê theo loại / đơn vị / tình trạng, lịch sử một thiết bị |
+| **Doanh nghiệp & người dùng** | Doanh nghiệp cha – chi nhánh (tự tham chiếu `parent_id`), mỗi doanh nghiệp tối đa `max_users` tài khoản (mặc định 10). Vai trò – quyền N-N |
+| **Thiết bị & bảo hành** | Nhập kho, gán / thu hồi cho doanh nghiệp, kích hoạt bảo hành khi bán, gia hạn, đổi trả máy (chuyển bảo hành sang máy mới) |
+| **Sản lượng (quota)** | Cấp sản lượng cho máy (`quota_grants`, cộng dồn), phân bổ từ cha xuống chi nhánh (`quota_allocations`), ghi lượt sử dụng (`usage_logs`, trừ dần), khoá / mở khoá máy |
+| **Giám sát** | Cảnh báo theo ngưỡng (sản lượng < 20 % / < 10 % / hết; bảo hành còn 30 / 15 / 7 ngày / hết hạn; máy offline) → thông báo tới người dùng; dashboard cho admin và cho doanh nghiệp; xuất báo cáo; audit log |
 
-## Hai điểm cốt lõi cần hiểu trước khi đọc code
+## Ba điểm cốt lõi cần hiểu trước khi đọc code
 
-1. **Lịch sử thiết bị là append-only.** Mỗi lần cấp, thu hồi, luân chuyển, bảo trì là **một dòng mới** trong `device_history`, không sửa dòng cũ. Trạng thái hiện tại của thiết bị (`devices.status`, `devices.holder_*`) là *projection* từ lịch sử — sửa projection mà không ghi lịch sử là làm sai lệch kiểm kê về sau.
+1. **`device_quotas` là projection, lịch sử là sự thật.** Tổng / đã dùng / còn lại trên `device_quotas` phải bằng `Σ quota_grants − Σ usage_logs` (cộng phân bổ nhận, trừ phân bổ cho đi). Mọi thay đổi sản lượng đi qua **một transaction**: ghi dòng lịch sử **và** cập nhật projection. Sửa projection tay là sai kiểm kê không lần lại được.
 
-2. **Trạng thái thiết bị là một máy trạng thái, không phải một cột tự do.** Chuyển trạng thái phải qua service, service kiểm tra chuyển hợp lệ:
+2. **Lượt sử dụng từ thiết bị có thể đến trễ, trùng, lệch thứ tự.** `POST /usage-logs` do máy ngoài hiện trường gọi — mất mạng rồi gửi bù là chuyện thường. Mỗi lượt mang `client_ref` (id do thiết bị sinh) làm khoá idempotent; unique constraint ở DB, gặp trùng thì trả kết quả cũ, không trừ hai lần. Sản lượng còn lại **không được âm**: vượt trần thì ghi lượt với `rejected = true` và phát cảnh báo, không im lặng bỏ.
+
+3. **Phạm vi dữ liệu theo doanh nghiệp.** Người dùng có `enterprise_id` chỉ thấy dữ liệu của doanh nghiệp mình **và các chi nhánh con**; `enterprise_id = NULL` là quản trị viên hệ thống, thấy tất cả. Mọi repository nhận `scope` từ token, không phải từ query string.
+
+## Máy trạng thái thiết bị
+
+Đặc tả chưa liệt kê giá trị `status`; bộ dưới đây suy từ các endpoint `assign` / `unassign` / `lock` / `unlock` / `device-exchanges` — **cần chốt** (xem cuối file).
 
 ```
-IN_STOCK ──cấp──▶ IN_USE ──thu hồi──▶ IN_STOCK
-   │                 │
-   │ hỏng            │ hỏng
-   ▼                 ▼
-UNDER_MAINTENANCE ──xong──▶ IN_STOCK
-   │
-   │ không sửa được
-   ▼
-DISPOSED (terminal)
+IN_STOCK ──assign──▶ ACTIVE ──lock────▶ LOCKED
+   ▲                   │  ▲               │
+   │ unassign          │  └───unlock──────┘
+   └───────────────────┴───────────────────┘   (unassign từ cả ACTIVE lẫn LOCKED)
+ACTIVE / LOCKED ──exchange approved──▶ EXCHANGED (terminal, máy cũ)
+IN_STOCK ──retire──▶ RETIRED (terminal)
 ```
 
-`DISPOSED` là trạng thái cuối, không quay lại. Thiết bị `IN_USE` không được thanh lý thẳng — phải thu hồi trước, để hồ sơ ghi nhận rõ ai đang giữ lúc thanh lý.
+- `LOCKED` do hết sản lượng / hết gói / khoá tay; **không** đổi `enterprise_id`.
+- `unassign` xoá `enterprise_id`, bảo hành đang `ACTIVE` chuyển `VOID`? — **cần chốt**.
+- Máy cũ trong đổi trả sang `EXCHANGED`; máy mới nhận bảo hành còn lại (`warranties.source = EXCHANGE`).
+- "Offline" **không** phải `status`: suy từ `last_seen_at` quá ngưỡng (mặc định 24 h), để không nhân đôi nguồn sự thật.
 
 ## Người dùng
 
-| Vai trò | Nhịp làm việc |
+| Vai trò (mặc định) | `enterprise_id` | Thấy gì |
+|---|---|---|
+| `SYSTEM_ADMIN` | NULL | Toàn hệ thống: nhập máy, gán, cấp sản lượng, duyệt đổi trả, báo cáo |
+| `ENTERPRISE_ADMIN` | có | Doanh nghiệp mình + chi nhánh: người dùng, thiết bị, phân bổ sản lượng xuống chi nhánh, tạo yêu cầu đổi trả |
+| `ENTERPRISE_USER` | có | Xem thiết bị, sản lượng, thông báo của doanh nghiệp mình |
+
+Vai trò là **dữ liệu** (`roles` ↔ `permissions` N-N), ba vai trò trên chỉ là seed.
+
+## Mô hình dữ liệu
+
+Tên bảng theo đúng đặc tả. Cụm trong `qltb-service/src/db/schema/`:
+
+| Cụm | Bảng |
 |---|---|
-| **Quản trị thiết bị** (admin) | Vào theo việc: nhập thiết bị mới, cấp phát, lập phiếu bảo trì, kiểm kê |
-| **Trưởng đơn vị** | Xem thiết bị của đơn vị mình, xác nhận nhận / trả |
-| **Người dùng** | Xem thiết bị mình đang giữ, báo hỏng |
+| `system.ts` | `enterprises` · `users` · `roles` · `permissions` · `users_roles` · `roles_permissions` · `audit_logs` |
+| `device.ts` | `devices` · `warranties` · `device_exchanges` |
+| `quota.ts` | `device_quotas` · `quota_grants` · `quota_allocations` · `usage_logs` |
+| `alert.ts` | `alerts` · `notifications` |
 
-Phân quyền chưa có ở khung này — nhưng thiết kế DTO / service phải để sau này gắn được `tenant_id` / `actor` từ token mà không viết lại.
+Append-only (trigger chặn UPDATE/DELETE): `quota_grants` · `quota_allocations` · `usage_logs` · `audit_logs`.
 
-## Mô hình dữ liệu tối thiểu
+## Còn phải chốt
 
-```
-device_categories   loại thiết bị (laptop, màn hình, máy in...)
-devices             hồ sơ thiết bị — mỗi thiết bị một dòng, `code` unique
-device_history      append-only: ASSIGN / RETURN / TRANSFER / MAINTENANCE_START / MAINTENANCE_END / DISPOSE
-```
-
-Chi tiết cột và ràng buộc ở `qltb-service/src/db/schema/`. Hợp đồng REST ở [`api-contracts.md`](api-contracts.md).
+- Đơn vị của "sản lượng": lượt / trang / phút? Code gọi chung là `amount` (số nguyên), mỗi `usage_log` mặc định 1.
+- Bộ giá trị `devices.status` ở trên, và `unassign` có huỷ bảo hành không.
+- Thiết bị gọi `POST /usage-logs` xác thực bằng gì (API key theo máy? token doanh nghiệp?) — quyết định này ảnh hưởng schema `devices` (cần cột `api_key_hash`).
+- Ngưỡng "offline" (24 h?) và ai chạy job quét cảnh báo (cron trong service hay job ngoài).

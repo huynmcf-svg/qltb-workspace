@@ -31,10 +31,16 @@ src/
 ├── db/
 │   ├── drizzle.module.ts   # một Pool duy nhất, @Global
 │   ├── migrate.ts
-│   ├── schema/             # Drizzle schema theo cụm: device.ts, system.ts...
-│   └── migrations/         # SQL sinh bởi drizzle-kit + file viết tay (trigger)
-└── modules/                # nghiệp vụ
+│   ├── schema/             # Drizzle schema theo cụm (docs/project-overview.md):
+│   │   ├── system.ts       #   enterprises · users · roles · permissions · users_roles · roles_permissions · audit_logs
+│   │   ├── device.ts       #   devices · warranties · device_exchanges
+│   │   ├── quota.ts        #   device_quotas · quota_grants · quota_allocations · usage_logs
+│   │   └── alert.ts        #   alerts · notifications
+│   ├── migrations/         # 0000 sinh bởi drizzle-kit; 0001 viết tay: CHECK, partial unique, trigger
+│   └── seed.ts             # quyền (permission.catalog) · 3 vai trò · admin đầu tiên
+└── modules/                # nghiệp vụ — một thư mục một nhóm endpoint của đặc tả
     ├── health/
+    ├── permission/         # permission.catalog.ts — danh mục quyền, nguồn sự thật
     └── device/
         ├── device.module.ts
         ├── device.controller.ts     # route + map DTO, không nghiệp vụ
@@ -78,11 +84,13 @@ src/
 
 ### Ràng buộc bắt buộc enforce ở DB, không chỉ ở code
 
-- **Append-only**: `device_history` (và `audit_logs` khi có). Trigger chặn `UPDATE` / `DELETE` ở migration viết tay. Code sai còn sửa được; dữ liệu mất thì không.
-- **Unique** trên `devices.code`. Kiểm bằng unique constraint + bắt lỗi `23505` → `DEVICE_CODE_CONFLICT`, **không** `SELECT` rồi `INSERT` — hai request song song lọt cả hai.
-- `status` là `text` có `CHECK` liệt kê giá trị hợp lệ. Không dùng `pg enum` — đổi enum trong Postgres là migration khó chịu.
-- Mọi bảng có `created_at` / `updated_at` `timestamptz NOT NULL`.
-- Index cho truy vấn danh sách: `(status, created_at DESC)`, `(category_id)`.
+- **Append-only**: `quota_grants` · `quota_allocations` · `usage_logs` · `audit_logs`. Trigger chặn `UPDATE` / `DELETE` ở migration viết tay. Code sai còn sửa được; dữ liệu mất thì không.
+- **Unique** trên `devices.serial_number`, `enterprises.code`, `users.username`, `(usage_logs.device_id, client_ref)`. Kiểm bằng unique constraint + bắt lỗi `23505` → mã 409 tương ứng, **không** `SELECT` rồi `INSERT` — hai request song song lọt cả hai.
+- **Bất biến sản lượng** `quota_remaining = quota_total − quota_used ≥ 0` là `CHECK` ở DB. Mọi thay đổi sản lượng: một transaction ghi lịch sử + cập nhật projection.
+- **Partial unique**: một bảo hành `ACTIVE` mỗi máy; một yêu cầu đổi trả `PENDING` mỗi máy.
+- `status` là `text` có `CHECK` liệt kê giá trị hợp lệ. Không dùng `pg enum` — đổi enum trong Postgres là migration khó chịu. CHECK `devices_enterprise_by_status_check` ép: trong kho thì không có doanh nghiệp, đang gán thì phải có.
+- Mọi bảng có `created_at` / `updated_at` `timestamptz NOT NULL`; trigger `touch_updated_at` tự cập nhật.
+- `used_at` (giờ thiết bị) ≠ `received_at` (giờ server) trên `usage_logs` — hai cột riêng, cả hai `NOT NULL`.
 
 ### Migration
 
@@ -92,7 +100,11 @@ src/
 
 ### Trạng thái thiết bị
 
-Máy trạng thái nằm ở **một chỗ** — `device.service.ts` (hàm `assertTransition`). Mọi đường đổi `status` đi qua đó. Đổi `status` bằng `PATCH` thẳng vào cột là lỗi thiết kế.
+Máy trạng thái nằm ở **một chỗ** — `modules/device/device-state.ts` (`nextStatus`). Mọi đường đổi `status` (assign / unassign / lock / unlock / exchange / retire) đi qua đó, và `repository.transition()` kiểm `from_status` ở `WHERE` để hai request song song không cùng thắng. Đổi `status` bằng `PUT` hồ sơ là lỗi thiết kế.
+
+### Phạm vi doanh nghiệp
+
+Repository nhận `scope` (`enterprise_id` của người gọi + chi nhánh con, hoặc `null` = toàn hệ thống) từ service, service lấy từ token. Không bao giờ lấy phạm vi từ query string.
 
 ## Swagger
 

@@ -10,6 +10,7 @@ Entry point cho LLM agent làm việc trên dự án QLTB — hệ thống quả
 quan-ly-thiet-bi/
 ├── qltb-workspace/        ← bạn đang ở đây: CHỈ docs và convention, không có code
 │   ├── docs/
+│   │   ├── spec/          ← đặc tả gốc chuyển từ .docx (nguồn sự thật nghiệp vụ)
 │   │   └── rules/         ← cấu trúc bắt buộc cho backend / frontend
 │   └── plans/
 ├── qltb-service/          ← repo riêng, NestJS 11 + Drizzle. Script DB, .env ở đây
@@ -22,7 +23,7 @@ Ba thư mục nằm **cạnh nhau**, mỗi cái một git riêng. Code, script, 
 
 | Bạn định làm gì | Đọc trước |
 |---|---|
-| Bất cứ việc gì | `docs/project-overview.md` |
+| Bất cứ việc gì | `docs/spec/qltb-spec.md` — đặc tả gốc: bảng, quan hệ, endpoint. Rồi `docs/project-overview.md` |
 | Backend | `docs/rules/backend-structure.md` + `docs/api-contracts.md` |
 | Frontend | `docs/rules/frontend-structure.md` + `docs/api-contracts.md` |
 | Đổi REST contract | `docs/api-contracts.md` — sửa cả 2 repo trong cùng một đợt, đừng lệch |
